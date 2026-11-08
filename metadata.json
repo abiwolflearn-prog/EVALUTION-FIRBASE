@@ -1,0 +1,6 @@
+{
+  "name": "WCU Evaluation",
+  "description": "Wachemo University Teacher Evaluation System built with React Native, Expo SDK, TypeScript, Expo Router, and Firebase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

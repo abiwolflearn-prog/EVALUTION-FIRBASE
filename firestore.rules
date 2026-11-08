@@ -1,0 +1,440 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Security Primitives & 3-Tier Role Hierarchy
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function hasAdminDoc() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function currentAdminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
+    }
+
+    function isBootstrappedSuperAdminEmail() {
+      return isSignedIn() &&
+        'email' in request.auth.token &&
+        'email_verified' in request.auth.token &&
+        request.auth.token.email == 'abelbimrew868@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
+    // LEVEL 1: SUPER ADMIN
+    // Verified via active /admins/{uid} record with role == 'super_admin' (or legacy 'admin')
+    // OR verified bootstrapped Super Admin email (unless explicitly deactivated in /admins/{uid}).
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        (
+          isBootstrappedSuperAdminEmail() &&
+          (!hasAdminDoc() || !('isActive' in currentAdminDoc()) || currentAdminDoc().isActive == true)
+        ) ||
+        (
+          hasAdminDoc() &&
+          (!('isActive' in currentAdminDoc()) || currentAdminDoc().isActive == true) &&
+          (!('role' in currentAdminDoc()) || currentAdminDoc().role == 'super_admin' || currentAdminDoc().role == 'admin')
+        )
+      );
+    }
+
+    // LEVEL 2: DEPARTMENT ADMIN
+    // Must have an active /admins/{uid} record with role == 'department_admin' and assigned facultyId & departmentId.
+    function isDepartmentAdmin() {
+      return hasAdminDoc() &&
+        ('isActive' in currentAdminDoc() && currentAdminDoc().isActive == true) &&
+        ('role' in currentAdminDoc() && currentAdminDoc().role == 'department_admin') &&
+        ('facultyId' in currentAdminDoc() && currentAdminDoc().facultyId is string && currentAdminDoc().facultyId.size() >= 1) &&
+        ('departmentId' in currentAdminDoc() && currentAdminDoc().departmentId is string && currentAdminDoc().departmentId.size() >= 1);
+    }
+
+    function isDepartmentAdminFor(deptId) {
+      return isDepartmentAdmin() &&
+        deptId is string &&
+        currentAdminDoc().departmentId == deptId;
+    }
+
+    // 3. Schema Validation Blueprints
+    function isValidUserProfile(data) {
+      return data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+             data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120 &&
+             data.email is string && data.email.size() >= 5 && data.email.size() <= 160 &&
+             data.studentId is string && data.studentId.size() <= 40 &&
+             data.role is string && (
+               data.role == 'student' ||
+               data.role == 'admin' ||
+               data.role == 'super_admin' ||
+               data.role == 'department_admin'
+             ) &&
+             data.facultyId is string && data.facultyId.size() >= 1 && data.facultyId.size() <= 80 &&
+             data.departmentId is string && data.departmentId.size() >= 1 && data.departmentId.size() <= 80 &&
+             (!('yearOfStudy' in data) || (data.yearOfStudy is int && data.yearOfStudy >= 1 && data.yearOfStudy <= 7)) &&
+             data.isActive is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAdminRecord(data, adminId) {
+      return data.uid == adminId &&
+             data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120 &&
+             data.email is string && data.email.size() >= 5 && data.email.size() <= 160 &&
+             data.role is string && (data.role == 'super_admin' || data.role == 'department_admin') &&
+             data.isActive is bool &&
+             data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time &&
+             (
+               (
+                 data.role == 'super_admin' &&
+                 (!('facultyId' in data) || data.facultyId == null || data.facultyId == '') &&
+                 (!('departmentId' in data) || data.departmentId == null || data.departmentId == '')
+               ) ||
+               (
+                 data.role == 'department_admin' &&
+                 data.facultyId is string && data.facultyId.size() >= 1 && data.facultyId.size() <= 80 &&
+                 data.departmentId is string && data.departmentId.size() >= 1 && data.departmentId.size() <= 80 &&
+                 exists(/databases/$(database)/documents/faculties/$(data.facultyId)) &&
+                 exists(/databases/$(database)/documents/departments/$(data.departmentId)) &&
+                 get(/databases/$(database)/documents/departments/$(data.departmentId)).data.facultyId == data.facultyId
+               )
+             );
+    }
+
+    function isValidAuditLog(data, logId) {
+      return data.id == logId &&
+             data.actorUid == request.auth.uid &&
+             data.actorRole is string && (
+               (isSuperAdmin() && data.actorRole == 'super_admin') ||
+               (isDepartmentAdmin() && data.actorRole == 'department_admin' && data.assignedDepartmentId == currentAdminDoc().departmentId)
+             ) &&
+             data.action is string && data.action.size() >= 2 && data.action.size() <= 80 &&
+             data.targetCollection is string && data.targetCollection.size() >= 1 && data.targetCollection.size() <= 60 &&
+             data.targetDocumentId is string && data.targetDocumentId.size() >= 1 && data.targetDocumentId.size() <= 128 &&
+             (!('exportFormat' in data) || (data.exportFormat is string && data.exportFormat in ['', 'PDF', 'XLSX'])) &&
+             (!('reportScope' in data) || (data.reportScope is string && data.reportScope.size() <= 160)) &&
+             (!('selectedFilters' in data) || (data.selectedFilters is string && data.selectedFilters.size() <= 500)) &&
+             (!('exportedRecordCount' in data) || (data.exportedRecordCount is int && data.exportedRecordCount >= 0)) &&
+             (!('details' in data) || (data.details is string && data.details.size() <= 600)) &&
+             data.timestamp is timestamp && data.timestamp <= request.time;
+    }
+
+    function isValidFaculty(data, facultyId) {
+      return data.id == facultyId &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 160 &&
+             data.description is string && data.description.size() <= 600 &&
+             data.isActive is bool;
+    }
+
+    function isValidDepartment(data, departmentId) {
+      return data.id == departmentId &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 160 &&
+             data.facultyId is string && data.facultyId.size() >= 1 && data.facultyId.size() <= 80 &&
+             data.description is string && data.description.size() <= 600 &&
+             data.isActive is bool;
+    }
+
+    function isValidTeacher(data, teacherId) {
+      return data.id == teacherId &&
+             data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120 &&
+             data.email is string && data.email.size() >= 5 && data.email.size() <= 160 &&
+             data.profileImage is string && data.profileImage.size() <= 500 &&
+             data.facultyId is string && data.facultyId.size() >= 1 && data.facultyId.size() <= 80 &&
+             data.departmentId is string && data.departmentId.size() >= 1 && data.departmentId.size() <= 80 &&
+             data.specialization is string && data.specialization.size() >= 2 && data.specialization.size() <= 160 &&
+             data.isActive is bool;
+    }
+
+    function isValidCourse(data, courseId) {
+      return data.id == courseId &&
+             data.courseCode is string && data.courseCode.size() >= 2 && data.courseCode.size() <= 40 &&
+             data.courseName is string && data.courseName.size() >= 2 && data.courseName.size() <= 160 &&
+             data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 80 &&
+             data.departmentId is string && data.departmentId.size() >= 1 && data.departmentId.size() <= 80 &&
+             data.semesterId is string && data.semesterId.size() >= 1 && data.semesterId.size() <= 80 &&
+             data.academicYear is string && data.academicYear.size() >= 4 && data.academicYear.size() <= 30 &&
+             data.isActive is bool;
+    }
+
+    function isValidSemester(data, semesterId) {
+      return data.id == semesterId &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+             data.academicYear is string && data.academicYear.size() >= 4 && data.academicYear.size() <= 30 &&
+             data.isActive is bool &&
+             (!('isEvaluationOpen' in data) || data.isEvaluationOpen is bool) &&
+             (!('startDate' in data) || (data.startDate is string && data.startDate.size() <= 40)) &&
+             (!('endDate' in data) || (data.endDate is string && data.endDate.size() <= 40));
+    }
+
+    function isValidEvaluation(data, evaluationId) {
+      return data.evaluationId == evaluationId &&
+             data.studentId == request.auth.uid &&
+             data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 80 &&
+             data.courseId is string && data.courseId.size() >= 1 && data.courseId.size() <= 80 &&
+             data.departmentId is string && data.departmentId.size() >= 1 && data.departmentId.size() <= 80 &&
+             data.facultyId is string && data.facultyId.size() >= 1 && data.facultyId.size() <= 80 &&
+             data.semesterId is string && data.semesterId.size() >= 1 && data.semesterId.size() <= 80 &&
+             data.academicYear is string && data.academicYear.size() >= 4 && data.academicYear.size() <= 30 &&
+             data.categoryRatings is map && data.categoryRatings.size() == 6 &&
+             data.questionRatings is map && data.questionRatings.size() == 18 &&
+             (data.overallScore is number) && data.overallScore >= 1.0 && data.overallScore <= 5.0 &&
+             data.comment is string && data.comment.size() <= 1000 &&
+             data.submittedAt is timestamp && data.submittedAt <= request.time &&
+             data.status == 'submitted';
+    }
+
+    // 4. User Profiles Collection (/users/{userId})
+    match /users/{userId} {
+      // PII & Department Isolation:
+      // - Profile owner can read own profile.
+      // - Super Admin can read any user profile.
+      // - Department Admin can read ONLY student profiles belonging to their assigned departmentId.
+      allow get: if isSignedIn() && isValidId(userId) && (
+        isOwner(userId) ||
+        isSuperAdmin() ||
+        (resource != null && isDepartmentAdminFor(existing().departmentId) && existing().role == 'student')
+      );
+
+      allow list: if isSignedIn() && (
+        existing().uid == request.auth.uid ||
+        isSuperAdmin() ||
+        (isDepartmentAdminFor(existing().departmentId) && existing().role == 'student')
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isOwner(userId) &&
+                       incoming().uid == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'uid',
+                         'fullName',
+                         'email',
+                         'studentId',
+                         'role',
+                         'facultyId',
+                         'departmentId',
+                         'isActive',
+                         'createdAt',
+                         'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'uid',
+                         'fullName',
+                         'email',
+                         'studentId',
+                         'role',
+                         'facultyId',
+                         'departmentId',
+                         'yearOfStudy',
+                         'isActive',
+                         'createdAt',
+                         'updatedAt'
+                       ]) &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().isActive == true &&
+                       (incoming().role == 'student' || isSuperAdmin());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().uid == existing().uid &&
+                       incoming().createdAt == existing().createdAt && (
+                         (
+                           isOwner(userId) &&
+                           incoming().role == existing().role &&
+                           incoming().isActive == existing().isActive &&
+                           incoming().email == existing().email &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'fullName',
+                             'studentId',
+                             'facultyId',
+                             'departmentId',
+                             'yearOfStudy',
+                             'updatedAt'
+                           ])
+                         ) ||
+                         (
+                           isSuperAdmin() &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'fullName',
+                             'email',
+                             'studentId',
+                             'role',
+                             'facultyId',
+                             'departmentId',
+                             'yearOfStudy',
+                             'isActive',
+                             'updatedAt'
+                           ])
+                         )
+                       );
+
+      allow delete: if isSignedIn() && isValidId(userId) && isSuperAdmin();
+    }
+
+    // 5. Authorized Administrators Registry (/admins/{adminId})
+    // Managed exclusively by verified Super Admins (or Admin SDK).
+    // Department Admins can ONLY read their own active record and can NEVER create or modify any /admins record.
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (
+        isSuperAdmin() ||
+        isOwner(adminId)
+      );
+      allow list: if isSignedIn() && isSuperAdmin();
+
+      // Only an existing active Super Admin can create a Department Admin (or another admin) record.
+      // Prevents self-promotion (adminId != request.auth.uid) and validates faculty-department relationship.
+      allow create: if isSignedIn() &&
+                       isValidId(adminId) &&
+                       isSuperAdmin() &&
+                       adminId != request.auth.uid &&
+                       incoming().createdBy == request.auth.uid &&
+                       isValidAdminRecord(incoming(), adminId);
+
+      // Only an existing active Super Admin can activate/deactivate or update department assignments.
+      allow update: if isSignedIn() &&
+                       isValidId(adminId) &&
+                       isSuperAdmin() &&
+                       incoming().uid == existing().uid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().createdBy == existing().createdBy &&
+                       isValidAdminRecord(incoming(), adminId);
+
+      allow delete: if false;
+    }
+
+    // 6. Administrator Activity Audit Logs (/audit_logs/{logId})
+    // Immutable append-only audit trail.
+    match /audit_logs/{logId} {
+      allow get, list: if isSignedIn() && (
+        isSuperAdmin() ||
+        (isDepartmentAdmin() && existing().assignedDepartmentId == currentAdminDoc().departmentId)
+      );
+      allow create: if isSignedIn() &&
+                       isValidId(logId) &&
+                       (isSuperAdmin() || isDepartmentAdmin()) &&
+                       isValidAuditLog(incoming(), logId);
+      allow update, delete: if false;
+    }
+
+    // 7. Academic Directory Collections
+    // Faculties, Departments, and Semesters: Authenticated read, Super Admin-only write.
+    match /faculties/{facultyId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(facultyId) && isSuperAdmin() && isValidFaculty(incoming(), facultyId);
+      allow delete: if isSignedIn() && isValidId(facultyId) && isSuperAdmin();
+    }
+
+    match /departments/{departmentId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(departmentId) && isSuperAdmin() && isValidDepartment(incoming(), departmentId);
+      allow delete: if isSignedIn() && isValidId(departmentId) && isSuperAdmin();
+    }
+
+    match /semesters/{semesterId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(semesterId) && isSuperAdmin() && isValidSemester(incoming(), semesterId);
+      allow delete: if isSignedIn() && isValidId(semesterId) && isSuperAdmin();
+    }
+
+    // Teachers: Authenticated read; Super Admin can manage all; Department Admin can manage ONLY their assigned departmentId & facultyId.
+    match /teachers/{teacherId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() &&
+                       isValidId(teacherId) &&
+                       isValidTeacher(incoming(), teacherId) && (
+                         isSuperAdmin() ||
+                         (
+                           isDepartmentAdminFor(incoming().departmentId) &&
+                           incoming().facultyId == currentAdminDoc().facultyId
+                         )
+                       );
+      allow update: if isSignedIn() &&
+                       isValidId(teacherId) &&
+                       isValidTeacher(incoming(), teacherId) && (
+                         isSuperAdmin() ||
+                         (
+                           isDepartmentAdminFor(existing().departmentId) &&
+                           incoming().departmentId == existing().departmentId &&
+                           incoming().facultyId == existing().facultyId
+                         )
+                       );
+      allow delete: if isSignedIn() && isValidId(teacherId) && isSuperAdmin();
+    }
+
+    // Courses: Authenticated read; Super Admin can manage all; Department Admin can manage ONLY their assigned departmentId.
+    match /courses/{courseId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() &&
+                       isValidId(courseId) &&
+                       isValidCourse(incoming(), courseId) && (
+                         isSuperAdmin() ||
+                         isDepartmentAdminFor(incoming().departmentId)
+                       );
+      allow update: if isSignedIn() &&
+                       isValidId(courseId) &&
+                       isValidCourse(incoming(), courseId) && (
+                         isSuperAdmin() ||
+                         (
+                           isDepartmentAdminFor(existing().departmentId) &&
+                           incoming().departmentId == existing().departmentId
+                         )
+                       );
+      allow delete: if isSignedIn() && isValidId(courseId) && isSuperAdmin();
+    }
+
+    // 8. Teacher Evaluations Collection (/evaluations/{evaluationId})
+    // Deterministic composite key: {studentUid}_{teacherId}_{courseId}_{semesterId}
+    match /evaluations/{evaluationId} {
+      allow get: if isSignedIn() && isValidId(evaluationId) && (
+        existing().studentId == request.auth.uid ||
+        isSuperAdmin() ||
+        isDepartmentAdminFor(existing().departmentId)
+      );
+      allow list: if isSignedIn() && (
+        existing().studentId == request.auth.uid ||
+        isSuperAdmin() ||
+        isDepartmentAdminFor(existing().departmentId)
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(evaluationId) &&
+                       evaluationId == (request.auth.uid + '_' + incoming().teacherId + '_' + incoming().courseId + '_' + incoming().semesterId) &&
+                       isValidEvaluation(incoming(), evaluationId) &&
+                       exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'student' &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.departmentId == incoming().departmentId &&
+                       exists(/databases/$(database)/documents/courses/$(incoming().courseId)) &&
+                       get(/databases/$(database)/documents/courses/$(incoming().courseId)).data.isActive == true &&
+                       get(/databases/$(database)/documents/courses/$(incoming().courseId)).data.departmentId == incoming().departmentId &&
+                       get(/databases/$(database)/documents/courses/$(incoming().courseId)).data.teacherId == incoming().teacherId;
+
+      // Submitted evaluations are strictly immutable and cannot be modified or deleted.
+      allow update, delete: if false;
+    }
+  }
+}

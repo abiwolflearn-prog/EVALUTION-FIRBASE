@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">WCU Evaluation</string>
+    <string name="university_name">Wachemo University</string>
+    <string name="system_subtitle">Teacher Evaluation &amp; Academic Quality Assurance System</string>
+    <string name="campus_tag">WCU • HOSSANA, ETHIOPIA</string>
+    <string name="university_motto">Light for the Generation!</string>
+    <string name="welcome_portal_title">Academic Quality Assurance Portal</string>
+    <string name="welcome_portal_desc">Empowering Wachemo University students and academic leadership with structured, transparent, and secure instructor evaluations across all colleges and departments.</string>
+    <string name="student_sign_in">Student Sign In</string>
+    <string name="register_student_account">Register New Student Account</string>
+    <string name="admin_sign_in">Administrator Sign In</string>
+    <string name="forgot_password">Forgot Password?</string>
+    <string name="switch_theme">Switch Light / Dark Mode</string>
+</resources>

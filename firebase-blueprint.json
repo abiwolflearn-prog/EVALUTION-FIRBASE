@@ -1,0 +1,268 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Wachemo University user profile document stored at /users/{userId}. Students can only create their own profile with role == 'student'.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "studentId": { "type": "string" },
+        "role": {
+          "type": "string",
+          "enum": ["student", "admin", "super_admin", "department_admin"]
+        },
+        "facultyId": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "yearOfStudy": { "type": "integer" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid",
+        "fullName",
+        "email",
+        "studentId",
+        "role",
+        "facultyId",
+        "departmentId",
+        "isActive",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted administrator authorization record at /admins/{adminId}. Managed exclusively by Super Admins or privileged backend.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": {
+          "type": "string",
+          "enum": ["super_admin", "department_admin", "admin"]
+        },
+        "facultyId": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "AdminAuditLog": {
+      "title": "AdminAuditLog",
+      "description": "Immutable administrator activity log stored at /audit_logs/{logId}, including evaluation report export events.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "actorUid": { "type": "string" },
+        "actorRole": {
+          "type": "string",
+          "enum": ["super_admin", "department_admin"]
+        },
+        "assignedDepartmentId": { "type": "string" },
+        "action": { "type": "string" },
+        "targetCollection": { "type": "string" },
+        "targetDocumentId": { "type": "string" },
+        "exportFormat": {
+          "type": "string",
+          "enum": ["", "PDF", "XLSX"]
+        },
+        "reportScope": { "type": "string" },
+        "selectedFilters": { "type": "string" },
+        "exportedRecordCount": { "type": "integer" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "actorUid",
+        "actorRole",
+        "action",
+        "targetCollection",
+        "targetDocumentId",
+        "timestamp"
+      ]
+    },
+    "Faculty": {
+      "title": "Faculty",
+      "description": "Wachemo University College or Faculty stored at /faculties/{facultyId}.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "description", "isActive"]
+    },
+    "Department": {
+      "title": "Department",
+      "description": "Academic Department under a Faculty stored at /departments/{departmentId}.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "description": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "facultyId", "description", "isActive"]
+    },
+    "Teacher": {
+      "title": "Teacher",
+      "description": "University instructor profile stored at /teachers/{teacherId}.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "profileImage": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "specialization": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "fullName",
+        "email",
+        "profileImage",
+        "facultyId",
+        "departmentId",
+        "specialization",
+        "isActive"
+      ]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "Academic course assigned to a teacher and department at /courses/{courseId}.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "courseCode": { "type": "string" },
+        "courseName": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "semesterId": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "courseCode",
+        "courseName",
+        "teacherId",
+        "departmentId",
+        "semesterId",
+        "academicYear",
+        "isActive"
+      ]
+    },
+    "Semester": {
+      "title": "Semester",
+      "description": "Academic semester and evaluation period stored at /semesters/{semesterId}.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "isEvaluationOpen": { "type": "boolean" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "academicYear", "isActive"]
+    },
+    "TeacherEvaluation": {
+      "title": "TeacherEvaluation",
+      "description": "Immutable student teacher evaluation record stored at /evaluations/{evaluationId}.",
+      "type": "object",
+      "properties": {
+        "evaluationId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "facultyId": { "type": "string" },
+        "semesterId": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "categoryRatings": { "type": "object" },
+        "questionRatings": { "type": "object" },
+        "overallScore": { "type": "number" },
+        "comment": { "type": "string" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["submitted"] }
+      },
+      "required": [
+        "evaluationId",
+        "studentId",
+        "teacherId",
+        "courseId",
+        "departmentId",
+        "facultyId",
+        "semesterId",
+        "academicYear",
+        "categoryRatings",
+        "questionRatings",
+        "overallScore",
+        "comment",
+        "submittedAt",
+        "status"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles for Wachemo University students and administrators."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted authorization records for Super Admins and Department Admins."
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminAuditLog" },
+      "description": "Immutable administrator activity audit logs."
+    },
+    "/faculties/{facultyId}": {
+      "schema": { "$ref": "#/entities/Faculty" },
+      "description": "University faculties and colleges."
+    },
+    "/departments/{departmentId}": {
+      "schema": { "$ref": "#/entities/Department" },
+      "description": "Academic departments within faculties."
+    },
+    "/teachers/{teacherId}": {
+      "schema": { "$ref": "#/entities/Teacher" },
+      "description": "Academic teaching staff directory."
+    },
+    "/courses/{courseId}": {
+      "schema": { "$ref": "#/entities/Course" },
+      "description": "Courses offered by departments and assigned to teachers."
+    },
+    "/semesters/{semesterId}": {
+      "schema": { "$ref": "#/entities/Semester" },
+      "description": "Academic semesters and evaluation window state."
+    },
+    "/evaluations/{evaluationId}": {
+      "schema": { "$ref": "#/entities/TeacherEvaluation" },
+      "description": "Immutable student teacher evaluations."
+    }
+  }
+}

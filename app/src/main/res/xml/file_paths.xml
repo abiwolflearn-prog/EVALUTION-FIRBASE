@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path
+        name="wcu_reports_cache"
+        path="wcu_reports/" />
+    <files-path
+        name="wcu_reports_files"
+        path="wcu_reports/" />
+</paths>
