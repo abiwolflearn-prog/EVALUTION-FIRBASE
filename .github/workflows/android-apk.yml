@@ -23,7 +23,7 @@ jobs:
           java-version: '21'
 
       # Initialize Android SDK without passing a combined package list
-           - name: Set up Android SDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
