@@ -13,33 +13,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Download project source code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Configure Java 21
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
-      # 3. Install Android SDK and required packages
+      # Initialize Android SDK without passing a combined package list
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platform-tools
-            platforms;android-36
-            build-tools;36.0.0
 
-      # 4. Configure Gradle
+      # Install each package separately
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager --install "platform-tools"
+          sdkmanager --install "platforms;android-36.1"
+          sdkmanager --install "build-tools;36.0.0"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
 
-      # 5. Generate debug signing key
       - name: Generate debug signing key
         run: |
           keytool -genkeypair -v \
@@ -52,11 +51,9 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
-      # 6. Build Android debug APK
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
 
-      # 7. Upload generated APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
