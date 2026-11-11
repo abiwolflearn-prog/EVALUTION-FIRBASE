@@ -10,12 +10,22 @@
 /.idea/assetWizardSettings.xml
 .DS_Store
 /build
+/app/build
+/.build-outputs
 /captures
 .externalNativeBuild
 .cxx
 local.properties
 .env
+.env.*
+!.env.example
+*.jks
+*.keystore
 debug.keystore
+debug.keystore.base64
+debug.keystore.bak
+*service-account*.json
+*firebase-adminsdk*.json
 *-debug.log
 
 # Expo & React Native
